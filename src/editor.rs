@@ -28,25 +28,42 @@ pub struct Editor {
     pub cur_x: usize,
     pub cur_y: usize,
     pub buf: Vec<String>,
+    pub modified: bool,
 }
 
 impl Editor {
     pub fn new() -> Self {
-        let buf: Vec<String> = vec![String::new()];
-
-        let mode = EditorMode::Normal;
-
-        let cmd = Command::None;
-
-        let filename = String::new();
-    
         Self {
-            mode,
-            cmd,
+            mode: EditorMode::Normal,
+            cmd: Command::None,
+            filename: String::new(),
+            cur_x: 0,
+            cur_y: 0,
+            buf: vec![String::new()],
+            modified: false,
+        }
+    }
+    pub fn from_file(filename: String, buf: Vec<String>) -> Self {
+        Self {
+            mode: EditorMode::Normal,
+            cmd: Command::None,
             filename,
             cur_x: 0,
             cur_y: 0,
             buf,
+            modified: false,
+        }
+    }
+
+    pub fn new_with_filename(filename: String) -> Self {
+        Self {
+            mode: EditorMode::Normal,
+            cmd: Command::None,
+            filename,
+            cur_x: 0,
+            cur_y: 0,
+            buf: vec![String::new()],
+            modified: false,
         }
     }
 

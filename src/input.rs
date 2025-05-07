@@ -34,23 +34,35 @@ pub fn get_inputs(editor: &mut Editor) -> Result<bool, std::io::Error> {
 fn check_keys_i(editor: &mut Editor, key_event: KeyEvent) -> bool {
     match key_event.code {
         KeyCode::Enter => {
-            if !editor.filename.is_empty() {
-                if let Err(e) = save_buffer(&editor.buf, &editor.filename) {
-                    eprintln!("Error saving file {e}");
+            if editor.filename.is_empty() {
+                // Nothing has been entered, so continue to wait for user to 
+                // enter a filename.
+            } else {
+                match save_buffer(&editor.buf, &editor.filename) {
+                    Ok(_) => {
+                        editor.modified = false;
+                    }
+                    Err(e) => {
+                        eprintln!("Error saving file: {e}");
+                    }
                 }
+                editor.mode = EditorMode::Normal;
             }
-            editor.mode = EditorMode::Normal;
         }
+
         KeyCode::Esc => {
             editor.filename.clear();
             editor.mode = EditorMode::Normal;
         }
+
         KeyCode::Backspace => {
             editor.filename.pop();
         }
+
         KeyCode::Char(c) => {
             editor.filename.push(c);
         }
+        
         _ => {}
     }
     false
@@ -98,6 +110,7 @@ fn check_keys_n(editor: &mut Editor, key_event: KeyEvent) -> bool {
             }
             editor.buf[editor.cur_y].insert(editor.cur_x, c);
             editor.cur_x += 1;
+            editor.modified = true;
         }
 
         KeyCode::Enter => {
@@ -106,18 +119,21 @@ fn check_keys_n(editor: &mut Editor, key_event: KeyEvent) -> bool {
             editor.buf.insert(editor.cur_y + 1, new_line);
             editor.cur_y += 1;
             editor.cur_x = 0;
+            editor.modified = true;
         }
 
         KeyCode::Backspace => {
             if editor.cur_x > 0 {
                 editor.buf[editor.cur_y].remove(editor.cur_x - 1);
                 editor.cur_x -= 1;
+                editor.modified = true;
             } else if editor.cur_y > 0 {
                 let prev_line_len = editor.buf[editor.cur_y - 1].len();
                 let current_line = editor.buf.remove(editor.cur_y);
                 editor.cur_y -= 1;
                 editor.cur_x = prev_line_len;
                 editor.buf[editor.cur_y].push_str(&current_line);
+                editor.modified = true;
             }
         }
 
