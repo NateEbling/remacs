@@ -18,6 +18,7 @@ pub enum Command {
 pub enum EditorMode {
     Normal,
     SaveFile,
+    PromptQuit,
 }
 
 pub struct Editor {
@@ -67,6 +68,8 @@ impl Editor {
             
             if self.mode == EditorMode::SaveFile {
                 write!(stdout, "\r\nWrite file: {}", self.filename)?;
+            } else if self.mode == EditorMode::PromptQuit {
+                write!(stdout, "\r\nModified buffers exist. Leave anyway (y/n)?")?;
             }
 
             execute!(stdout, cursor::MoveTo(self.cur_x as u16, self.cur_y as u16))?;

@@ -17,6 +17,15 @@ pub fn get_inputs(editor: &mut Editor) -> Result<bool, std::io::Error> {
             EditorMode::Normal => {
                 check = check_keys_n(editor, key_event);
             }
+            EditorMode::PromptQuit => {
+                match key_event.code {
+                    KeyCode::Char('y') => return Ok(true),
+                    KeyCode::Char('n') | KeyCode::Esc => {
+                        editor.mode = EditorMode::Normal;
+                    }
+                    _ => {}
+                }
+            }
         }
     }
     Ok(check)
@@ -55,8 +64,12 @@ fn check_keys_n(editor: &mut Editor, key_event: KeyEvent) -> bool {
         
         KeyCode::Char('c') => {
             if editor.cmd == Command::CtrlX {
-                // Check if the editor.buf is empty, if it is, ask to quit w/out saving
-                return true;
+                let is_empty = editor.buf.len() == 1 && editor.buf[0].is_empty();
+                if is_empty {
+                    return true;
+                } else {
+                    editor.mode = EditorMode::PromptQuit;
+                }
             } else {
                 if editor.cur_y >= editor.buf.len() {
                     editor.buf.push(String::new());
