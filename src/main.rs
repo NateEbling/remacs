@@ -1,6 +1,7 @@
 mod editor;
 mod input;
 mod buffer;
+mod statusline;
 use crate::editor::Editor;
 
 use std::io;

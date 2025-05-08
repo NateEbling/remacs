@@ -2,11 +2,15 @@ use crossterm::{
     cursor,
     execute, 
     terminal::{self, ClearType},
+    style::{Attribute, SetAttribute},
 };
 
 use std::io::{self, stdout, Write};
 
 use crate::input::get_inputs;
+use crate::statusline::create_statusline;
+
+pub const VERSION: &str = "0.1.0";
 
 #[derive(Debug, PartialEq)]
 pub enum Command {
@@ -69,6 +73,10 @@ impl Editor {
 
     pub fn start(&mut self) -> io::Result<()> {
         let mut stdout = stdout();
+
+        let (term_width, term_height) = terminal::size()?;
+        let term_height = term_height as usize;
+
         terminal::enable_raw_mode()?;
         execute!(stdout, terminal::EnterAlternateScreen, cursor::Show)?;
 
@@ -79,17 +87,29 @@ impl Editor {
                 cursor::MoveTo(0, 0)
             )?;
 
-            for line in &self.buf {
-                write!(stdout, "{line}\r\n")?;
-            }
-            
-            if self.mode == EditorMode::SaveFile {
-                write!(stdout, "\r\nWrite file: {}", self.filename)?;
-            } else if self.mode == EditorMode::PromptQuit {
-                write!(stdout, "\r\nModified buffers exist. Leave anyway (y/n)?")?;
+            create_statusline(self);
+
+            execute!(stdout, cursor::MoveTo(0, (term_height - 1) as u16))?;
+
+            let (mut cur_x, mut cur_y) = (self.cur_x as u16, self.cur_y as u16);
+
+            match self.mode {
+                EditorMode::SaveFile => {
+                    let tmp = "Write file: ".to_string();
+                    write!(stdout, "{}{}", tmp, self.filename)?;
+                    cur_x = (tmp.len() + self.filename.len()) as u16;
+                    cur_y = (term_height - 1) as u16;
+                }
+                EditorMode::PromptQuit => {
+                    let tmp = "Modified buffers exist. Leave anyway (y/n)? ".to_string();
+                    write!(stdout, "{tmp}")?;
+                    cur_x = tmp.len() as u16;
+                    cur_y = (term_height - 1) as u16;
+                }
+                _ => {}
             }
 
-            execute!(stdout, cursor::MoveTo(self.cur_x as u16, self.cur_y as u16))?;
+            execute!(stdout, cursor::MoveTo(cur_x, cur_y))?;
             stdout.flush()?;
 
             match get_inputs(self) {
