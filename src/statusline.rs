@@ -47,7 +47,7 @@ pub fn create_statusline(editor: &mut Editor) -> io::Result<()> {
     };
 
     let statusline = format!(
-        "{} Remacs {}: {} ({}) {}",
+        "{} Remacs {}: {} ({}) {} ",
         mod_marker,
         VERSION,
         filename,

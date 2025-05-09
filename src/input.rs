@@ -39,8 +39,12 @@ fn check_keys_s(editor: &mut Editor, key_event: KeyEvent) -> bool {
                 // enter a filename.
             } else {
                 match save_buffer(&editor.buf, &editor.filename) {
-                    Ok(_) => {
+                    Ok(0) => {
+
+                    }
+                    Ok(n) => {
                         editor.modified = false;
+                        editor.message = Some(format!("(Wrote {} line{})", n, if n == 1 { "" } else { "s" }));
                     }
                     Err(e) => {
                         eprintln!("Error saving file: {e}");
@@ -72,6 +76,32 @@ fn check_keys_n(editor: &mut Editor, key_event: KeyEvent) -> bool {
     match key_event.code {
         KeyCode::Char('x') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
             editor.cmd = Command::CtrlX;             
+        }
+
+        KeyCode::Char('d') => {
+            if editor.cmd == Command::CtrlX {
+                editor.cmd = Command::None;
+                if editor.filename_given && !editor.filename.is_empty() {
+                    match save_buffer(&editor.buf, &editor.filename) {
+                        Ok(_) => {
+                            editor.modified = false;
+                            let count = editor.buf.len();
+                            editor.message = Some(format!("(Wrote {} lines)", count));
+                        } 
+                        Err(e) => {
+                            eprintln!("Error saving file {e}");
+                        }
+                    }
+                } else {
+                    editor.mode = EditorMode::SaveFile;
+                }
+            } else {
+                if editor.cur_y >= editor.buf.len() {
+                    editor.buf.push(String::new());
+                }
+                editor.buf[editor.cur_y].insert(editor.cur_x, 'd');
+                editor.cur_x += 1;
+            }
         }
         
         KeyCode::Char('c') => {
