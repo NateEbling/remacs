@@ -2,7 +2,6 @@ use crossterm::{
     cursor,
     execute, 
     terminal::{self, ClearType},
-    style::{Attribute, SetAttribute},
 };
 
 use std::io::{self, stdout, Write};
@@ -33,6 +32,8 @@ pub struct Editor {
     pub cur_y: usize,
     pub buf: Vec<String>,
     pub modified: bool,
+    pub row_offset: usize,
+    pub col_offset: usize,
 }
 
 impl Editor {
@@ -45,6 +46,8 @@ impl Editor {
             cur_y: 0,
             buf: vec![String::new()],
             modified: false,
+            row_offset: 0,
+            col_offset: 0,
         }
     }
     pub fn from_file(filename: String, buf: Vec<String>) -> Self {
@@ -56,6 +59,8 @@ impl Editor {
             cur_y: 0,
             buf,
             modified: false,
+            row_offset: 0,
+            col_offset: 0,
         }
     }
 
@@ -68,14 +73,17 @@ impl Editor {
             cur_y: 0,
             buf: vec![String::new()],
             modified: false,
+            row_offset: 0,
+            col_offset: 0,
         }
     }
 
     pub fn start(&mut self) -> io::Result<()> {
         let mut stdout = stdout();
 
-        let (term_width, term_height) = terminal::size()?;
+        let (_term_width, term_height) = terminal::size()?;
         let term_height = term_height as usize;
+        let max_lines = (term_height - 2) as usize;
 
         terminal::enable_raw_mode()?;
         execute!(stdout, terminal::EnterAlternateScreen, cursor::Show)?;
@@ -83,30 +91,70 @@ impl Editor {
         loop {
             execute!(
                 stdout,
-                terminal::Clear(ClearType::All),
+                terminal::Clear(ClearType::FromCursorDown),
                 cursor::MoveTo(0, 0)
             )?;
 
-            create_statusline(self);
+            let screen_lines = (term_height - 2) as usize;
+
+            if self.cur_y < self.row_offset {
+                self.row_offset = self.cur_y;
+            } else if self.cur_y >= self.row_offset + screen_lines {
+                self.row_offset = self.cur_y - screen_lines + 1;
+            }
+
+            for i in 0..max_lines {
+                let buff_line = self.row_offset + i;
+                if buff_line >= self.buf.len() {
+                    write!(stdout, "~\r\n")?;
+                } else {
+                    write!(stdout, "{}\r\n", self.buf[buff_line])?;
+                }
+            }
+
+            if self.cur_y >= self.row_offset + screen_lines {
+                self.row_offset = self.cur_y - screen_lines + 1;
+            }
+
+            let _ = create_statusline(self);
 
             execute!(stdout, cursor::MoveTo(0, (term_height - 1) as u16))?;
 
-            let (mut cur_x, mut cur_y) = (self.cur_x as u16, self.cur_y as u16);
+            let max_y = (term_height - 3) as usize;
 
+            let mut cur_x = self.cur_x.saturating_sub(self.col_offset) as u16;
+            let screen_y = self.cur_y.saturating_sub(self.row_offset);
+
+            let mut cur_y = if screen_y >= screen_lines {
+                (screen_lines - 1) as u16
+            } else {
+                screen_y as u16
+            };
+
+            if screen_y >= screen_lines {
+                cur_y = (screen_lines - 1) as u16;
+            } else {
+                cur_y = screen_y as u16;
+            }
+
+            let prompt_y = (term_height - 1) as u16;
             match self.mode {
                 EditorMode::SaveFile => {
                     let tmp = "Write file: ".to_string();
                     write!(stdout, "{}{}", tmp, self.filename)?;
                     cur_x = (tmp.len() + self.filename.len()) as u16;
-                    cur_y = (term_height - 1) as u16;
+                    cur_y = prompt_y;
                 }
                 EditorMode::PromptQuit => {
                     let tmp = "Modified buffers exist. Leave anyway (y/n)? ".to_string();
                     write!(stdout, "{tmp}")?;
                     cur_x = tmp.len() as u16;
-                    cur_y = (term_height - 1) as u16;
+                    cur_y = prompt_y;
                 }
-                _ => {}
+                _ => {
+                    cur_x = self.cur_x.saturating_sub(self.col_offset) as u16;
+                    cur_y = self.cur_y.saturating_sub(self.row_offset) as u16;
+                }
             }
 
             execute!(stdout, cursor::MoveTo(cur_x, cur_y))?;

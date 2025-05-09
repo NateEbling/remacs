@@ -12,7 +12,7 @@ pub fn get_inputs(editor: &mut Editor) -> Result<bool, std::io::Error> {
     if let Event::Key(key_event) = event::read()? {
         match editor.mode {
             EditorMode::SaveFile => {
-                check = check_keys_i(editor, key_event);
+                check = check_keys_s(editor, key_event);
             }
             EditorMode::Normal => {
                 check = check_keys_n(editor, key_event);
@@ -31,7 +31,7 @@ pub fn get_inputs(editor: &mut Editor) -> Result<bool, std::io::Error> {
     Ok(check)
 }
 
-fn check_keys_i(editor: &mut Editor, key_event: KeyEvent) -> bool {
+fn check_keys_s(editor: &mut Editor, key_event: KeyEvent) -> bool {
     match key_event.code {
         KeyCode::Enter => {
             if editor.filename.is_empty() {
@@ -76,8 +76,7 @@ fn check_keys_n(editor: &mut Editor, key_event: KeyEvent) -> bool {
         
         KeyCode::Char('c') => {
             if editor.cmd == Command::CtrlX {
-                let is_empty = editor.buf.len() == 1 && editor.buf[0].is_empty();
-                if is_empty {
+                if !editor.modified {
                     return true;
                 } else {
                     editor.mode = EditorMode::PromptQuit;

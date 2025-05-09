@@ -16,7 +16,7 @@ pub fn create_statusline(editor: &mut Editor) -> io::Result<()> {
     let (term_width, term_height) = terminal::size()?;
     let term_height = term_height as usize;
 
-    for (i, line) in editor.buf.iter().enumerate() {
+    for (i, _line) in editor.buf.iter().enumerate() {
         if i >= term_height - 2 { break; }
     }
 
