@@ -232,12 +232,17 @@ fn check_keys_n(editor: &mut Editor, key_event: KeyEvent) -> bool {
         }
 
         KeyCode::Char(c) => {
-            if editor.cur_y >= editor.buf.len() {
-                editor.buf.push(String::new());
+            if editor.cmd == Command::CtrlX {
+                editor.message = Some(format!("(Key not bound)"));
+                editor.cmd = Command::None;
+            } else {
+                if editor.cur_y >= editor.buf.len() {
+                    editor.buf.push(String::new());
+                }
+                editor.buf[editor.cur_y].insert(editor.cur_x, c);
+                editor.cur_x += 1;
+                editor.modified = true;
             }
-            editor.buf[editor.cur_y].insert(editor.cur_x, c);
-            editor.cur_x += 1;
-            editor.modified = true;
         }
 
         KeyCode::Enter => {
