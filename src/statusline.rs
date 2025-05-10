@@ -46,7 +46,22 @@ pub fn create_statusline(editor: &mut Editor) -> io::Result<()> {
         }
     };
 
-    let statusline = format!(
+    let viewport_lines = term_height - 2;
+    let total_lines = editor.buf.len();
+    let last_visible_line = editor.row_offset + viewport_lines;
+
+    let pos_marker = if total_lines <= viewport_lines {
+        "All"
+    } else if editor.row_offset == 0 {
+        "Top"
+    } else if last_visible_line >= total_lines {
+        "Bot"
+    } else {
+        let percent = ((editor.row_offset as f64 / (total_lines as f64 - viewport_lines as f64)) * 100.0).round() as usize;
+        &format!("{percent}%")
+    };
+
+    let left = format!(
         "{} Remacs {}: {} ({}) {} ",
         mod_marker,
         VERSION,
@@ -55,12 +70,11 @@ pub fn create_statusline(editor: &mut Editor) -> io::Result<()> {
         rel_path,
     );
 
-    let statusline = if statusline.len() > term_width as usize {
-        statusline[..term_width as usize].to_string()
-    } else {
-        let dash_count = term_width as usize - statusline.len();
-        format!("{}{}", statusline, "-".repeat(dash_count))
-    };
+    let right = format!(" {} --", pos_marker);
+    let dash_count = term_width.saturating_sub((left.len() + right.len()).try_into().unwrap());
+    let filler = "-".repeat(dash_count.into());
+
+    let statusline = format!("{}{}{}", left, filler, right);
 
     execute!(
         stdout, 
@@ -68,7 +82,7 @@ pub fn create_statusline(editor: &mut Editor) -> io::Result<()> {
         SetAttribute(Attribute::Reverse),
     )?;
     write!(stdout, "{}", statusline)?;
-    execute!(stdout, SetAttribute(Attribute::Reset))?;
+    execute!(stdout, SetAttribute(Attribute::NoReverse))?;
 
     return Ok(());
 }

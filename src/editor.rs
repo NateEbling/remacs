@@ -97,6 +97,7 @@ impl Editor {
         queue!(
             stdout, 
             terminal::EnterAlternateScreen, 
+            cursor::EnableBlinking,
             cursor::Show,
         )?;
 
@@ -132,7 +133,7 @@ impl Editor {
             self.row_offset = self.cur_y - screen_lines + 1;
         }
 
-        self.last_frame.truncate(self.buf.len());
+        self.last_frame.truncate(max_lines);
 
         for i in 0..max_lines {
             let buff_line = self.row_offset + i;
@@ -144,7 +145,7 @@ impl Editor {
                 self.buf[buff_line].clone()
             };
 
-            if self.last_frame.get(buff_line) != Some(&new_line) {
+            if self.last_frame.get(i) != Some(&new_line) {
                 queue!(
                     stdout,
                     cursor::MoveTo(0, screen_y),
@@ -152,8 +153,8 @@ impl Editor {
                 )?;
                 write!(stdout, "{new_line}")?;
 
-                if buff_line < self.last_frame.len() {
-                    self.last_frame[buff_line] = new_line.clone();
+                if i < self.last_frame.len() {
+                    self.last_frame[i] = new_line.clone();
                 } else {
                     self.last_frame.push(new_line.clone());
                 }
