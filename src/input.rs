@@ -6,36 +6,19 @@ use crate::editor::Editor;
 use crate::editor::Command;
 use crate::editor::EditorMode;
 use crate::buffer::save_buffer;
-
-macro_rules! ctrl {
-    ($ch:expr, $key_event:expr) => {
-        $key_event.code == KeyCode::Char($ch) && $key_event.modifiers.contains(KeyModifiers::CONTROL)
-    };
-}
-
-macro_rules! alt {
-    ($ch:expr, $key_event:expr) => {
-        $key_event.code == KeyCode::Char($ch) && $key_event.modifiers.contains(KeyModifiers::ALT)
-    };
-}
-
-macro_rules! alt_ctrl {
-    ($ch:expr, $key_event:expr) => {
-        $key_event.code == KeyCode::Char($ch)
-            && $key_event.modifiers.contains(KeyModifiers::ALT)
-            && $key_event.modifiers.contains(KeyModifiers::CONTROL)
-    };
-}
+use crate::ctrl;
+use crate::alt;
+use crate::alt_ctrl;
 
 pub fn get_inputs(editor: &mut Editor) -> Result<bool, std::io::Error> {
     let mut check = false;
     if let Event::Key(key_event) = event::read()? {
         match editor.mode {
             EditorMode::SaveFile => {
-                check = check_keys_s(editor, key_event);
+                check = check_keys_save(editor, key_event);
             }
             EditorMode::Normal => {
-                check = check_keys_n(editor, key_event);
+                check = check_keys_normal(editor, key_event);
             }
             EditorMode::PromptQuit => {
                 match key_event.code {
@@ -51,7 +34,7 @@ pub fn get_inputs(editor: &mut Editor) -> Result<bool, std::io::Error> {
     Ok(check)
 }
 
-fn check_keys_s(editor: &mut Editor, key_event: KeyEvent) -> bool {
+fn check_keys_save(editor: &mut Editor, key_event: KeyEvent) -> bool {
     match key_event.code {
         KeyCode::Enter => {
             if editor.filename.is_empty() {
@@ -92,7 +75,7 @@ fn check_keys_s(editor: &mut Editor, key_event: KeyEvent) -> bool {
     false
 }
 
-fn check_keys_n(editor: &mut Editor, key_event: KeyEvent) -> bool {
+fn check_keys_normal(editor: &mut Editor, key_event: KeyEvent) -> bool {
     match key_event.code {
         _ if ctrl!('x', key_event) => {
             editor.cmd = Command::CtrlX;             
@@ -134,6 +117,7 @@ fn check_keys_n(editor: &mut Editor, key_event: KeyEvent) -> bool {
             }
         }
 
+        // Delete next word
         _ if alt!('d', key_event) => {
             if let Some(line) = editor.buf.get_mut(editor.cur_y) {
                 let rest = &line[editor.cur_x..];
@@ -152,6 +136,7 @@ fn check_keys_n(editor: &mut Editor, key_event: KeyEvent) -> bool {
         }
 
         // Delete previous word (Alt + Ctrl + h)
+        // TODO: not working!
         _ if alt_ctrl!('h', key_event) => {
             if let Some(line) = editor.buf.get_mut(editor.cur_y) {
                 if editor.cur_x == 0 && editor.cur_y > 0 {
@@ -192,11 +177,7 @@ fn check_keys_n(editor: &mut Editor, key_event: KeyEvent) -> bool {
                     editor.mode = EditorMode::SaveFile;
                 }
             } else {
-                if editor.cur_y >= editor.buf.len() {
-                    editor.buf.push(String::new());
-                }
-                editor.buf[editor.cur_y].insert(editor.cur_x, 'd');
-                editor.cur_x += 1;
+                insert_char(editor, 'd');
             }
         }
         
@@ -209,11 +190,7 @@ fn check_keys_n(editor: &mut Editor, key_event: KeyEvent) -> bool {
                     editor.mode = EditorMode::PromptQuit;
                 }
             } else {
-                if editor.cur_y >= editor.buf.len() {
-                    editor.buf.push(String::new());
-                }
-                editor.buf[editor.cur_y].insert(editor.cur_x, 'c');
-                editor.cur_x += 1;
+                insert_char(editor, 'c');
             }
         }
 
@@ -223,11 +200,16 @@ fn check_keys_n(editor: &mut Editor, key_event: KeyEvent) -> bool {
                 editor.mode = EditorMode::SaveFile;
                 editor.cmd = Command::None;
             } else {
-                if editor.cur_y >= editor.buf.len() {
-                    editor.buf.push(String::new());
-                }
-                editor.buf[editor.cur_y].insert(editor.cur_x, 'w');
-                editor.cur_x += 1;
+                insert_char(editor, 'w');
+            }
+        }
+
+        // Incremental search
+        KeyCode::Char('s') => {
+            if editor.cmd == Command::CtrlX {
+                
+            } else {
+                insert_char(editor, 's');
             }
         }
 
@@ -236,12 +218,7 @@ fn check_keys_n(editor: &mut Editor, key_event: KeyEvent) -> bool {
                 editor.message = Some(format!("(Key not bound)"));
                 editor.cmd = Command::None;
             } else {
-                if editor.cur_y >= editor.buf.len() {
-                    editor.buf.push(String::new());
-                }
-                editor.buf[editor.cur_y].insert(editor.cur_x, c);
-                editor.cur_x += 1;
-                editor.modified = true;
+                insert_char(editor, c);
             }
         }
 
@@ -305,4 +282,13 @@ fn check_keys_n(editor: &mut Editor, key_event: KeyEvent) -> bool {
         }
     }
     false
+}
+
+fn insert_char(editor: &mut Editor, c: char) {
+    if editor.cur_y >= editor.buf.len() {
+        editor.buf.push(String::new());
+    }
+    editor.buf[editor.cur_y].insert(editor.cur_x, c);
+    editor.cur_x += 1;
+    editor.modified = true;
 }

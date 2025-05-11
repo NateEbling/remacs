@@ -2,6 +2,9 @@ mod editor;
 mod input;
 mod buffer;
 mod statusline;
+#[macro_use]
+mod macros;
+
 use crate::editor::Editor;
 
 use std::io;
