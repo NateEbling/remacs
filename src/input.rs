@@ -76,143 +76,90 @@ fn check_keys_save(editor: &mut Editor, key_event: KeyEvent) -> bool {
 }
 
 fn check_keys_normal(editor: &mut Editor, key_event: KeyEvent) -> bool {
+    editor.message = None;
     match key_event.code {
         _ if ctrl!('x', key_event) => {
             editor.cmd = Command::CtrlX;             
         }
 
-        // Kill to end of line
+        // New line
+        _ if ctrl!('m', key_event) => {
+
+        }
+
+        _ if ctrl!('a', key_event) => {
+            editor.move_to_line_start(); 
+        }
+
+        _ if ctrl!('e', key_event) => {
+            editor.move_to_line_end();
+        }
+
+        _ if ctrl!('n', key_event) => {
+            editor.move_next_line();
+        }
+
+        _ if ctrl!('p', key_event) => {
+            editor.move_prev_line();
+        }
+
+        _ if ctrl!('z', key_event) => {
+            editor.move_prev_page();
+        }
+
+        _ if ctrl!('v', key_event) => {
+            editor.move_next_page();
+        }
+
         _ if ctrl!('k', key_event) => {
-            if let Some(line) = editor.buf.get_mut(editor.cur_y) {
-                line.truncate(editor.cur_x);
-                editor.modified = true;
-            }
+            editor.kill_to_eol();
         }
 
-        // Delete previous character
         _ if ctrl!('h', key_event) => {
-            if editor.cur_x > 0 {
-                editor.buf[editor.cur_y].remove(editor.cur_x - 1);
-                editor.cur_x -= 1;
-                editor.modified = true;
-            } else if editor.cur_y > 0 {
-                let prev_line_len = editor.buf[editor.cur_y - 1].len();
-                let current_line = editor.buf.remove(editor.cur_y);
-                editor.cur_y -= 1;
-                editor.cur_x = prev_line_len;
-                editor.buf[editor.cur_y].push_str(&current_line);
-                editor.modified = true;
-            }
+            editor.del_prev_char();
         }
 
-        // Delete next character
         _ if ctrl!('d', key_event) => {
-            if editor.cur_x < editor.buf[editor.cur_y].len() {
-                editor.buf[editor.cur_y].remove(editor.cur_x);
-                editor.modified = true;
-            } else if editor.cur_y + 1 < editor.buf.len() {
-                let next_line = editor.buf.remove(editor.cur_y + 1);
-                editor.buf[editor.cur_y].push_str(&next_line);
-                editor.modified = true;
-            }
+            editor.del_next_char();
         }
 
-        // Delete next word
         _ if alt!('d', key_event) => {
-            if let Some(line) = editor.buf.get_mut(editor.cur_y) {
-                let rest = &line[editor.cur_x..];
-                if let Some(pos) = rest.find(char::is_whitespace) {
-                    let mut end = editor.cur_x + pos;
-                    // Skip over following whitespace
-                    while end < line.len() && line.as_bytes()[end].is_ascii_whitespace() {
-                        end += 1;
-                    }
-                    line.drain(editor.cur_x..end);
-                } else {
-                    line.truncate(editor.cur_x);
-                }
-                editor.modified = true;
-            }
+            editor.del_next_word();
         }
 
-        // Delete previous word (Alt + Ctrl + h)
-        // TODO: not working!
         _ if alt_ctrl!('h', key_event) => {
-            if let Some(line) = editor.buf.get_mut(editor.cur_y) {
-                if editor.cur_x == 0 && editor.cur_y > 0 {
-                    // Merge with previous line
-                    let current_line = editor.buf.remove(editor.cur_y);
-                    editor.cur_y -= 1;
-                    editor.cur_x = editor.buf[editor.cur_y].len();
-                    editor.buf[editor.cur_y].push_str(&current_line);
-                    editor.modified = true;
-                } else if editor.cur_x > 0 {
-                    let before = &line[..editor.cur_x];
-                    let idx = before.trim_end_matches(char::is_whitespace).rfind(char::is_whitespace)
-                        .map(|i| i + 1)
-                        .unwrap_or(0);
-                    line.drain(idx..editor.cur_x);
-                    editor.cur_x = idx;
-                    editor.modified = true;
-                }
-            }
+            editor.del_prev_word();
         }
 
         // Quick exit (save + quit)
         _ if alt!('z', key_event) => {
-            match save_buffer(&editor.buf, &editor.filename) {
-                Ok(_) => {
-                    return true
-                }
-                Err(e) => {
-                    editor.message = Some(format!("Error saving file, cannot exit: {e}"));
-                }
-            }
+            return editor.quick_exit();
         }
 
         // Save file
         KeyCode::Char('d') => {
             if editor.cmd == Command::CtrlX {
-                editor.cmd = Command::None;
-                if editor.filename_given && !editor.filename.is_empty() {
-                    match save_buffer(&editor.buf, &editor.filename) {
-                        Ok(_) => {
-                            editor.modified = false;
-                            let count = editor.buf.len();
-                            editor.message = Some(format!("(Wrote {} lines)", count));
-                        } 
-                        Err(e) => {
-                            eprintln!("Error saving file {e}");
-                        }
-                    }
-                } else {
-                    editor.mode = EditorMode::SaveFile;
-                }
+                editor.save_file();
             } else {
-                insert_char(editor, 'd');
+                editor.insert_char('d');
             }
         }
         
         // Quit
         KeyCode::Char('c') => {
             if editor.cmd == Command::CtrlX {
-                if !editor.modified {
-                    return true;
-                } else {
-                    editor.mode = EditorMode::PromptQuit;
-                }
+                return editor.quit();
             } else {
-                insert_char(editor, 'c');
+                editor.insert_char('c');
             }
         }
 
         // Write file
         KeyCode::Char('w') => {
             if editor.cmd == Command::CtrlX {
-                editor.mode = EditorMode::SaveFile;
-                editor.cmd = Command::None;
+                editor.write_buffer();
             } else {
-                insert_char(editor, 'w');
+                editor.insert_char('w');
             }
         }
 
@@ -221,8 +168,12 @@ fn check_keys_normal(editor: &mut Editor, key_event: KeyEvent) -> bool {
             if editor.cmd == Command::CtrlX {
                 
             } else {
-                insert_char(editor, 's');
+                editor.insert_char('s');
             }
+        }
+
+        KeyCode::Tab => {
+            editor.insert_tab();
         }
 
         KeyCode::Char(c) => {
@@ -230,7 +181,7 @@ fn check_keys_normal(editor: &mut Editor, key_event: KeyEvent) -> bool {
                 editor.message = Some(format!("(Key not bound)"));
                 editor.cmd = Command::None;
             } else {
-                insert_char(editor, c);
+                editor.insert_char(c);
             }
         }
 
@@ -240,21 +191,21 @@ fn check_keys_normal(editor: &mut Editor, key_event: KeyEvent) -> bool {
             editor.buf.insert(editor.cur_y + 1, new_line);
             editor.cur_y += 1;
             editor.cur_x = 0;
-            editor.modified = true;
+            editor.update_modified();
         }
 
         KeyCode::Backspace => {
             if editor.cur_x > 0 {
                 editor.buf[editor.cur_y].remove(editor.cur_x - 1);
                 editor.cur_x -= 1;
-                editor.modified = true;
+                editor.update_modified();
             } else if editor.cur_y > 0 {
                 let prev_line_len = editor.buf[editor.cur_y - 1].len();
                 let current_line = editor.buf.remove(editor.cur_y);
                 editor.cur_y -= 1;
                 editor.cur_x = prev_line_len;
                 editor.buf[editor.cur_y].push_str(&current_line);
-                editor.modified = true;
+                editor.update_modified();
             }
         }
 
@@ -294,13 +245,4 @@ fn check_keys_normal(editor: &mut Editor, key_event: KeyEvent) -> bool {
         }
     }
     false
-}
-
-fn insert_char(editor: &mut Editor, c: char) {
-    if editor.cur_y >= editor.buf.len() {
-        editor.buf.push(String::new());
-    }
-    editor.buf[editor.cur_y].insert(editor.cur_x, c);
-    editor.cur_x += 1;
-    editor.modified = true;
 }

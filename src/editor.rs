@@ -8,8 +8,10 @@ use std::io::{self, stdout, Write};
 
 use crate::input::get_inputs;
 use crate::statusline::create_statusline;
+use crate::buffer::save_buffer;
 
 pub const VERSION: &str = "0.2.0";
+pub const TAB_WIDTH: usize = 4;
 
 #[derive(Debug, PartialEq)]
 pub enum Command {
@@ -37,6 +39,7 @@ pub struct Editor {
     pub last_frame: Vec<String>,
     pub filename_given: bool,
     pub message: Option<String>,
+    pub original_buf: Vec<String>,
 }
 
 impl Editor {
@@ -54,9 +57,12 @@ impl Editor {
             last_frame: vec![String::new()],
             filename_given: false,
             message: None,
+            original_buf: vec![String::new()],
         }
     }
+
     pub fn from_file(filename: String, buf: Vec<String>) -> Self {
+        let original_buf = buf.clone();
         Self {
             mode: EditorMode::Normal,
             cmd: Command::None,
@@ -70,6 +76,7 @@ impl Editor {
             last_frame: vec![String::new()],
             filename_given: true,
             message: None,
+            original_buf,
         }
     }
 
@@ -87,6 +94,7 @@ impl Editor {
             last_frame: vec![String::new()],
             filename_given: true,
             message: None,
+            original_buf: vec![String::new()],
         }
     }
 
@@ -203,5 +211,190 @@ impl Editor {
         stdout.flush()?;
         self.message = None;
         Ok(())
+    }
+
+    pub fn move_to_line_start(&mut self) {
+        self.cur_x = 0;
+    }
+
+    pub fn move_to_line_end(&mut self) {
+        if let Some(line) = self.buf.get(self.cur_y) {
+            self.cur_x = line.len();
+        }
+    }
+
+    pub fn move_next_line(&mut self) {
+        if self.cur_y + 1 < self.buf.len() {
+            self.cur_y += 1;
+            let len = self.buf[self.cur_y].len();
+            self.cur_x = self.cur_x.min(len);
+        }
+    }
+
+    pub fn move_prev_line(&mut self) {
+        if self.cur_y > 0 {
+            self.cur_y -= 1;
+            let len = self.buf[self.cur_y].len();
+            self.cur_x = self.cur_x.min(len);
+        }
+    }
+
+    pub fn move_next_page(&mut self) {
+        let (_, term_height) = terminal::size().unwrap_or((0, 0));
+        let lines_per_page = term_height.saturating_sub(2) as usize;
+
+        if self.cur_y + 1 < self.buf.len() {
+            self.cur_y = (self.cur_y + lines_per_page).min(self.buf.len() - 1);
+            let len = self.buf[self.cur_y].len();
+            self.cur_x = self.cur_x.min(len);
+        }
+    }
+
+    pub fn move_prev_page(&mut self) {
+        let (_, term_height) = terminal::size().unwrap_or((0, 0));              
+        let lines_per_page = term_height.saturating_sub(2) as usize;            
+                                                                                
+        if self.cur_y > 0 {                                    
+            self.cur_y = self.cur_y.saturating_sub(lines_per_page);
+            let len = self.buf[self.cur_y].len();                               
+            self.cur_x = self.cur_x.min(len);                                   
+        }   
+    }
+
+    pub fn kill_to_eol(&mut self) {
+        if let Some(line) = self.buf.get_mut(self.cur_y) {
+            line.truncate(self.cur_x);
+            self.update_modified();
+        }
+    }
+
+    pub fn del_prev_char(&mut self) {
+        if self.cur_x > 0 {
+            self.buf[self.cur_y].remove(self.cur_x - 1);
+            self.cur_x -= 1;
+            self.update_modified();
+        } else if self.cur_y > 0 {
+            let prev_line_len = self.buf[self.cur_y - 1].len();
+            let current_line = self.buf.remove(self.cur_y);
+            self.cur_y -= 1;
+            self.cur_x = prev_line_len;
+            self.buf[self.cur_y].push_str(&current_line);
+            self.update_modified();
+        }
+    }
+
+    pub fn del_next_char(&mut self) {
+        if self.cur_x < self.buf[self.cur_y].len() {
+            self.buf[self.cur_y].remove(self.cur_x);
+            self.update_modified();
+        } else if self.cur_y + 1 < self.buf.len() {
+            let next_line = self.buf.remove(self.cur_y + 1);
+            self.buf[self.cur_y].push_str(&next_line);
+            self.update_modified();
+        }
+    }
+
+    pub fn del_next_word(&mut self) {
+        if let Some(line) = self.buf.get_mut(self.cur_y) {
+            let rest = &line[self.cur_x..];
+            if let Some(pos) = rest.find(char::is_whitespace) {
+                let mut end = self.cur_x + pos;
+                // Skip over following whitespace
+                while end < line.len() && line.as_bytes()[end].is_ascii_whitespace() {
+                    end += 1;
+                }
+                line.drain(self.cur_x..end);
+            } else {
+                line.truncate(self.cur_x);
+            }
+            self.update_modified();
+        }
+    }
+
+    // TODO: FIX, NOT WORKING
+    pub fn del_prev_word(&mut self) {
+        if let Some(line) = self.buf.get_mut(self.cur_y) {
+            if self.cur_x == 0 && self.cur_y > 0 {
+                // Merge with previous line
+                let current_line = self.buf.remove(self.cur_y);
+                self.cur_y -= 1;
+                self.cur_x = self.buf[self.cur_y].len();
+                self.buf[self.cur_y].push_str(&current_line);
+                self.update_modified();
+            } else if self.cur_x > 0 {
+                let before = &line[..self.cur_x];
+                let idx = before.trim_end_matches(char::is_whitespace).rfind(char::is_whitespace)
+                    .map(|i| i + 1)
+                    .unwrap_or(0);
+                line.drain(idx..self.cur_x);
+                self.cur_x = idx;
+                self.update_modified();
+            }
+        }
+    }
+
+    pub fn quick_exit(&mut self) -> bool {
+        match save_buffer(&self.buf, &self.filename) {
+            Ok(_) => {
+                return true;
+            }
+            Err(e) => {
+                self.message = Some(format!("Error saving file, cannot exit: {e}"));
+                self.mode = EditorMode::Normal;
+                return false;
+            }
+        }
+    }
+
+    pub fn insert_char(&mut self, c: char) {
+        if self.cur_y >= self.buf.len() {
+            self.buf.push(String::new());
+        }
+        self.buf[self.cur_y].insert(self.cur_x, c);
+        self.cur_x += 1;
+        self.update_modified();
+    }
+
+    pub fn save_file(&mut self) {
+        self.cmd = Command::None;
+        if self.filename_given && !self.filename.is_empty() {
+            match save_buffer(&self.buf, &self.filename) {
+                Ok(_) => {
+                    self.original_buf = self.buf.clone();
+                    self.modified = false;
+                    let count = self.buf.len();
+                    self.message = Some(format!("(Wrote {} lines)", count));
+                } 
+                Err(e) => {
+                    eprintln!("Error saving file {e}");
+                }
+            }
+        } else {
+            self.mode = EditorMode::SaveFile;
+        }
+    }
+
+    pub fn quit(&mut self) -> bool {
+        if !self.modified {
+            return true;
+        } else {
+            self.mode = EditorMode::PromptQuit;
+        }
+        false
+    }
+
+    pub fn write_buffer(&mut self) {
+        self.mode = EditorMode::SaveFile;
+        self.cmd = Command::None;
+    }
+
+    pub fn update_modified(&mut self) {
+        self.modified = self.buf != self.original_buf;
+    }
+
+    pub fn insert_tab(&mut self) {
+        for _ in 0..TAB_WIDTH {
+            self.insert_char(' ');
+        }
     }
 } 
