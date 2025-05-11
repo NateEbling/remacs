@@ -2,9 +2,11 @@ use crossterm::{
     cursor,
     terminal::{self, ClearType},
     queue,
+    execute,
 };
 
 use std::io::{self, stdout, Write};
+use std::process::Command as ShellCommand;
 
 use crate::input::get_inputs;
 use crate::statusline::create_statusline;
@@ -24,6 +26,7 @@ pub enum EditorMode {
     Normal,
     SaveFile,
     PromptQuit,
+    ShellCommand(String),
 }
 
 pub struct Editor {
@@ -192,6 +195,11 @@ impl Editor {
                 let tmp = "Modified buffers exist. Leave anyway (y/n)? ".to_string();
                 write!(stdout, "{tmp}")?;
                 cur_x = tmp.len() as u16;
+                cur_y = prompt_y;
+            }
+            EditorMode::ShellCommand(ref cmd_str) => {
+                write!(stdout, "!{}", cmd_str)?;
+                cur_x = (1 + cmd_str.len()) as u16;
                 cur_y = prompt_y;
             }
             _ => {
@@ -396,5 +404,35 @@ impl Editor {
         for _ in 0..TAB_WIDTH {
             self.insert_char(' ');
         }
+    }
+
+    pub fn write_shell_cmd(&mut self) {
+        self.cmd = Command::None;
+        self.mode = EditorMode::ShellCommand(String::new());
+    }
+
+    pub fn run_shell_cmd(&mut self, command: &str) -> io::Result<()> {
+        terminal::disable_raw_mode()?;
+        execute!(stdout(), terminal::LeaveAlternateScreen)?;
+
+        ShellCommand::new("sh")
+            .arg("-c")
+            .arg(command);
+
+        println!("(End)");
+
+        let _ = std::io::stdin().read_line(&mut String::new());
+
+        execute!(stdout(), terminal::EnterAlternateScreen)?;
+        terminal::enable_raw_mode()?;
+        execute!(
+            stdout(),
+            terminal::Clear(ClearType::All),
+            cursor::MoveTo(self.cur_x as u16, self.cur_y as u16)
+        )?;
+        self.last_frame.clear();
+        self.mode = EditorMode::Normal;
+
+        Ok(())
     }
 } 

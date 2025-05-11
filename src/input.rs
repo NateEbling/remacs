@@ -29,6 +29,25 @@ pub fn get_inputs(editor: &mut Editor) -> Result<bool, std::io::Error> {
                     _ => {}
                 }
             }
+            EditorMode::ShellCommand(ref mut cmd) => {
+                match key_event.code {
+                    KeyCode::Char(c) => {
+                        cmd.push(c);
+                    }
+                    KeyCode::Backspace => {
+                        cmd.pop();
+                    }
+                    KeyCode::Enter => {
+                        let command = std::mem::take(cmd);
+                        editor.mode = EditorMode::Normal;
+                        let _ = editor.run_shell_cmd(&command);
+                    }
+                    KeyCode::Esc => {
+                        editor.mode = EditorMode::Normal;
+                    }
+                    _ => {}
+                }
+            }
         }
     }
     Ok(check)
@@ -131,9 +150,17 @@ fn check_keys_normal(editor: &mut Editor, key_event: KeyEvent) -> bool {
             editor.del_prev_word();
         }
 
-        // Quick exit (save + quit)
         _ if alt!('z', key_event) => {
             return editor.quick_exit();
+        }
+
+        // Run shell command
+        KeyCode::Char('!') => {
+            if editor.cmd == Command::CtrlX {
+                editor.write_shell_cmd();
+            } else {
+                editor.insert_char('!');
+            }
         }
 
         // Save file
