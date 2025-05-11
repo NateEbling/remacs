@@ -158,6 +158,18 @@ fn check_keys_normal(editor: &mut Editor, key_event: KeyEvent) -> bool {
             }
         }
 
+        // Quick exit (save + quit)
+        _ if alt!('z', key_event) => {
+            match save_buffer(&editor.buf, &editor.filename) {
+                Ok(_) => {
+                    return true
+                }
+                Err(e) => {
+                    editor.message = Some(format!("Error saving file, cannot exit: {e}"));
+                }
+            }
+        }
+
         // Save file
         KeyCode::Char('d') => {
             if editor.cmd == Command::CtrlX {
