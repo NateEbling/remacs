@@ -415,9 +415,10 @@ impl Editor {
         terminal::disable_raw_mode()?;
         execute!(stdout(), terminal::LeaveAlternateScreen)?;
 
-        ShellCommand::new("sh")
+        let _ = ShellCommand::new("sh")
             .arg("-c")
-            .arg(command);
+            .arg(command)
+            .status();
 
         println!("(End)");
 

@@ -193,7 +193,7 @@ fn check_keys_normal(editor: &mut Editor, key_event: KeyEvent) -> bool {
         // Incremental search
         KeyCode::Char('s') => {
             if editor.cmd == Command::CtrlX {
-                
+                        
             } else {
                 editor.insert_char('s');
             }
