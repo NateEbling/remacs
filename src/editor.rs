@@ -12,7 +12,7 @@ use crate::input::get_inputs;
 use crate::statusline::create_statusline;
 use crate::buffer::save_buffer;
 
-pub const VERSION: &str = "0.3.0";
+pub const VERSION: &str = "0.4.0";
 pub const TAB_WIDTH: usize = 4;
 
 #[derive(Debug, PartialEq)]

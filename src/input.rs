@@ -77,7 +77,6 @@ fn check_keys_save(editor: &mut Editor, key_event: KeyEvent) -> bool {
         }
 
         KeyCode::Esc => {
-            editor.filename.clear();
             editor.mode = EditorMode::Normal;
         }
 
@@ -103,7 +102,11 @@ fn check_keys_normal(editor: &mut Editor, key_event: KeyEvent) -> bool {
 
         // New line
         _ if ctrl!('m', key_event) => {
-
+            let current_line = editor.buf[editor.cur_y].split_off(editor.cur_x);
+            editor.cur_y += 1;
+            editor.buf.insert(editor.cur_y, current_line);
+            editor.cur_x = 0;
+            editor.update_modified();
         }
 
         _ if ctrl!('a', key_event) => {
