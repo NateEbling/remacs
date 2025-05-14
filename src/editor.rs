@@ -317,9 +317,28 @@ impl Editor {
     }
 
     pub fn kill_to_eol(&mut self) {
+        let buf_len = self.buf.len(); // pull out buffer length first
+
         if let Some(line) = self.buf.get_mut(self.cur_y) {
-            line.truncate(self.cur_x);
-            self.update_modified();
+            if self.cur_x >= line.len() {
+                // At or beyond end of line — delete next line if it exists
+                if self.cur_y < buf_len - 1 {
+                    self.buf.remove(self.cur_y + 1);
+                    self.update_modified();
+                }
+            } else if self.cur_x == 0 && line.trim().is_empty() && buf_len > 1 {
+                // Blank line at start — delete current line
+                self.buf.remove(self.cur_y);
+                if self.cur_y >= self.buf.len() {
+                    self.cur_y = self.buf.len().saturating_sub(1);
+                }
+                self.cur_x = self.buf[self.cur_y].len().min(self.cur_x);
+                self.update_modified();
+            } else {
+                // Normal truncate
+                line.truncate(self.cur_x);
+                self.update_modified();
+            }
         }
     }
 
@@ -484,7 +503,7 @@ impl Editor {
         Ok(())
     }
 
-    pub fn get_indent(&mut self, line: &str) -> String {
+    pub fn get_indent(&self, line: &str) -> String {
         line.chars()
             .take_while(|c| *c == ' ' || *c == '\t')
             .collect()
