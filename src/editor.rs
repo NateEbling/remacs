@@ -130,8 +130,9 @@ impl Editor {
     }
 
     fn render(&mut self, stdout: &mut io::Stdout) -> io::Result<()> {
-        let (_term_width, term_height) = terminal::size()?;
+        let (term_width, term_height) = terminal::size()?;
         let term_height = term_height as usize;
+        let term_width = term_width as usize;
         let max_lines = (term_height - 2) as usize;
 
         queue!(stdout, cursor::MoveTo(0, 0))?;
@@ -150,24 +151,60 @@ impl Editor {
             let buff_line = self.row_offset + i;
             let screen_y = i as u16;
 
-            let new_line = if buff_line >= self.buf.len() {
+            let line = if buff_line >= self.buf.len() {
                 "~".to_string()
             } else {
-                self.buf[buff_line].clone()
+                let line = &self.buf[buff_line];
+                let is_current_line = buff_line == self.cur_y;
+                let line_col_offset = if is_current_line {
+                    self.col_offset
+                } else {
+                    0
+                };
+
+                let mut visible_line = String::new();
+                let line_len = line.len();
+
+                if line_len <= line_col_offset {
+                    "".to_string() // nothing to show
+                } else {
+                    let mut available_width = term_width;
+                    let left_hidden = is_current_line && line_col_offset > 0;
+                    let right_hidden = is_current_line && line_col_offset + term_width < line_len;
+
+                    if left_hidden {
+                        visible_line.push('$');
+                        available_width = available_width.saturating_sub(1);
+                    }
+
+                    if right_hidden {
+                        available_width = available_width.saturating_sub(1);
+                    }
+
+                    let end = (line_col_offset + available_width).min(line_len);
+                    let slice = &line[line_col_offset..end];
+                    visible_line.push_str(slice);
+
+                    if right_hidden {
+                        visible_line.push('$');
+                    }
+
+                    visible_line
+                }
             };
 
-            if self.last_frame.get(i) != Some(&new_line) {
+            if self.last_frame.get(i) != Some(&line) {
                 queue!(
                     stdout,
                     cursor::MoveTo(0, screen_y),
                     terminal::Clear(ClearType::CurrentLine),
                 )?;
-                write!(stdout, "{new_line}")?;
+                write!(stdout, "{line}")?;
 
                 if i < self.last_frame.len() {
-                    self.last_frame[i] = new_line.clone();
+                    self.last_frame[i] = line.clone();
                 } else {
-                    self.last_frame.push(new_line.clone());
+                    self.last_frame.push(line.clone());
                 }
             }
         }
@@ -176,11 +213,19 @@ impl Editor {
             self.row_offset = self.cur_y - screen_lines + 1;
         }
 
+        if self.cur_x >= self.col_offset + term_width { 
+            self.col_offset = self.cur_x - term_width + 1;
+        }
+
+        if self.cur_x < self.col_offset {
+            self.col_offset = self.cur_x;
+        }
+
         let _ = create_statusline(self);
 
         queue!(stdout, cursor::MoveTo(0, (term_height - 1) as u16))?;
 
-        let cur_x;
+        let mut cur_x;
         let cur_y;
 
         let prompt_y = (term_height - 1) as u16;
@@ -205,6 +250,8 @@ impl Editor {
             _ => {
                 cur_x = self.cur_x.saturating_sub(self.col_offset) as u16;
                 cur_y = self.cur_y.saturating_sub(self.row_offset) as u16;
+
+                cur_x = cur_x.min((term_width - 1) as u16);
             }
         }
 
@@ -435,5 +482,11 @@ impl Editor {
         self.mode = EditorMode::Normal;
 
         Ok(())
+    }
+
+    pub fn get_indent(&mut self, line: &str) -> String {
+        line.chars()
+            .take_while(|c| *c == ' ' || *c == '\t')
+            .collect()
     }
 } 

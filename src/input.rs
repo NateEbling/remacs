@@ -102,10 +102,12 @@ fn check_keys_normal(editor: &mut Editor, key_event: KeyEvent) -> bool {
 
         // New line
         _ if ctrl!('m', key_event) => {
-            let current_line = editor.buf[editor.cur_y].split_off(editor.cur_x);
+            let mut current_line = editor.buf[editor.cur_y].split_off(editor.cur_x);
             editor.cur_y += 1;
+            let indent = editor.get_indent(&current_line);
+            current_line = indent + &current_line;
             editor.buf.insert(editor.cur_y, current_line);
-            editor.cur_x = 0;
+            editor.cur_x = editor.buf[editor.cur_y].len();
             editor.update_modified();
         }
 
@@ -216,11 +218,19 @@ fn check_keys_normal(editor: &mut Editor, key_event: KeyEvent) -> bool {
         }
 
         KeyCode::Enter => {
-            let current_line = editor.buf.get_mut(editor.cur_y).unwrap();
-            let new_line = current_line.split_off(editor.cur_x);
+            let mut current_line = editor.buf[editor.cur_y].clone();
+
+            let right = current_line.split_off(editor.cur_x);
+
+            let indent = editor.get_indent(&current_line);
+
+            let new_line = format!("{}{}", indent, right);
+
             editor.buf.insert(editor.cur_y + 1, new_line);
+
             editor.cur_y += 1;
-            editor.cur_x = 0;
+            editor.cur_x = indent.len();
+
             editor.update_modified();
         }
 
