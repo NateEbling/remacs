@@ -26,4 +26,4 @@ cargo build --release
 sudo cp target/release/$PROGRAM $BINDIR
 sudo chmod 755 $BINDIR/$PROGRAM
 
-echo "Installed $PROGRAM to $BINDIR"
+echo "Installed Remacs (re) to $BINDIR"
